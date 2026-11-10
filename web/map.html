@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Smart City | Live Operations Map</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+<style>
+:root{font-family:Inter,Segoe UI,Arial,sans-serif;color:#1f2937;background:#f4f7fb}
+*{box-sizing:border-box}body{margin:0}.top{padding:18px 24px;background:#fff;border-bottom:1px solid #e5eaf1;display:flex;justify-content:space-between;align-items:center;gap:12px}
+h1{font-size:20px;margin:0}.sub{color:#64748b;font-size:13px;margin-top:4px}.layout{display:grid;grid-template-columns:310px 1fr;height:calc(100vh - 72px)}
+aside{background:#fff;border-right:1px solid #e5eaf1;padding:18px;overflow:auto}#map{height:100%;width:100%;background:#e8eef3}
+.legend{font-size:13px;line-height:2;color:#475569}.dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:8px}
+.card{padding:12px;border:1px solid #e5eaf1;border-radius:10px;margin:12px 0;background:#fbfcfe}
+button{border:0;border-radius:8px;background:#315f9e;color:white;padding:9px 12px;cursor:pointer}
+.warning{color:#9a3412;background:#fff7ed;padding:12px;border-radius:8px;font-size:13px;line-height:1.5;margin-top:12px}
+.success{color:#166534;background:#f0fdf4;padding:12px;border-radius:8px;font-size:13px;line-height:1.5;margin-top:12px}
+.leaflet-popup-content{line-height:1.55}.leaflet-container{font:13px Inter,Segoe UI,Arial,sans-serif}
+@media(max-width:760px){.layout{grid-template-columns:1fr;grid-template-rows:auto 1fr;height:auto}#map{height:65vh;min-height:380px}aside{border-right:0;border-bottom:1px solid #e5eaf1}}
+</style>
+</head>
+<body>
+<header class="top"><div><h1>Smart City — Live Operations Map</h1><div class="sub">OpenStreetMap · Leaflet · Java Dijkstra routing</div></div><button id="refreshButton" type="button">Refresh map</button></header>
+<div class="layout"><aside>
+<h3>Map legend</h3>
+<div class="legend">
+<div><span class="dot" style="background:#2563eb"></span>City area</div>
+<div><span class="dot" style="background:#0f766e"></span>Resource center</div>
+<div><span class="dot" style="background:#16a34a"></span>Available resource</div>
+<div><span class="dot" style="background:#dc2626"></span>Occupied resource</div>
+<div><span class="dot" style="background:#ea580c"></span>Emergency request</div>
+<div><span class="dot" style="background:#991b1b"></span>Critical request</div>
+</div>
+<div class="card"><b>Dijkstra route suggestions</b><p class="sub">Select an emergency marker. The map compares available matching resources using your configured weighted city roads and draws the shortest graph path. The route is a suggestion and does not dispatch a resource.</p></div>
+<div id="summary" class="sub" aria-live="polite">Loading map data…</div>
+<div id="mapWarning" aria-live="polite"></div>
+<div class="sub" style="margin-top:16px">Map data © OpenStreetMap contributors. <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">Attribution</a>.</div>
+</aside><main id="map" aria-label="Smart city live map"></main></div>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<script>
+'use strict';
+let map;
+let markerLayer;
+let routeLayer;
+let refreshTimer;
+const DEFAULT_CENTER = [21.1458, 79.0882]; // Nagpur fallback when no coordinates are configured.
+const COLORS = {area:'#2563eb',center:'#0f766e',available:'#16a34a',occupied:'#dc2626',emergency:'#ea580c',critical:'#991b1b'};
+
+function showMessage(message, kind='warning') {
+  const host = document.getElementById('mapWarning');
+  host.replaceChildren();
+  if (!message) return;
+  const box = document.createElement('div');
+  box.className = kind;
+  box.textContent = message;
+  host.appendChild(box);
+}
+function validPoint(point) {
+  return point && Number.isFinite(Number(point.lat)) && Number.isFinite(Number(point.lng))
+    && Number(point.lat) >= -90 && Number(point.lat) <= 90
+    && Number(point.lng) >= -180 && Number(point.lng) <= 180;
+}
+function addCircle(point, color, title, popupHtml, onClick) {
+  if (!validPoint(point)) return;
+  const marker = L.circleMarker([Number(point.lat), Number(point.lng)], {
+    radius: 8, color:'#fff', weight:2, fillColor:color, fillOpacity:0.95
+  }).addTo(markerLayer);
+  marker.bindPopup(popupHtml);
+  if (onClick) marker.on('click', onClick);
+  marker.bindTooltip(title);
+}
+function escapeHtml(value) {
+  return String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+async function suggestRoute(request, data) {
+  if (routeLayer) { routeLayer.remove(); routeLayer = null; }
+  try {
+    // The local Java endpoint calls CityModel.previewNearest(), sharing the application's Dijkstra implementation.
+    const query = new URLSearchParams({area:request.location, type:request.type});
+    const response = await fetch('/api/route?' + query.toString(), {cache:'no-store'});
+    if (!response.ok) throw new Error('Route service returned HTTP ' + response.status);
+    const result = await response.json();
+    if (!result.found) {
+      showMessage('No available matching resource has a connected route to ' + request.location + '.');
+      return;
+    }
+    const coordinateByArea = new Map((data.areas || []).map(area => [area.name, [Number(area.lat), Number(area.lng)]]));
+    // Java's allocation path is ordered resource-center -> emergency area.
+    const coordinates = (result.path || []).map(area => coordinateByArea.get(area)).filter(Boolean);
+    if (coordinates.length !== (result.path || []).length || coordinates.length < 1) {
+      showMessage('The Java Dijkstra route was found (' + result.distance + ' graph units), but one or more path areas have no map coordinates. Add coordinates to those areas.');
+      return;
+    }
+    routeLayer = L.polyline(coordinates, {color:'#7c3aed', weight:5, opacity:0.85}).addTo(map);
+    map.fitBounds(routeLayer.getBounds(), {padding:[35,35], maxZoom:15});
+    showMessage('Java Dijkstra suggestion: ' + result.resourceId + ' from ' + result.center
+      + ' · ' + result.distance + ' km · ' + result.path.join(' → ')
+      + '. This is a configured graph route, not live traffic or turn-by-turn navigation. No resource was dispatched.', 'success');
+  } catch (error) {
+    showMessage('Could not calculate a route: ' + error.message + '. Make sure the Java application is running.');
+  }
+}
+async function refreshData() {
+  try {
+    const response = await fetch('/api/locations', {cache:'no-store'});
+    if (!response.ok) throw new Error('Local map service returned HTTP ' + response.status);
+    const data = await response.json();
+    markerLayer.clearLayers();
+    if (routeLayer) { routeLayer.remove(); routeLayer = null; }
+    const bounds = [];
+    (data.areas || []).forEach(area => {
+      if (!validPoint(area)) return;
+      const color = area.center ? COLORS.center : COLORS.area;
+      addCircle(area, color, area.name,
+        '<b>' + escapeHtml(area.name) + '</b><br>' + (area.center ? 'Resource center' : 'City area'));
+      bounds.push([Number(area.lat), Number(area.lng)]);
+    });
+    (data.resources || []).forEach(resource => {
+      if (!validPoint(resource)) return;
+      addCircle(resource, resource.available ? COLORS.available : COLORS.occupied,
+        resource.id, '<b>' + escapeHtml(resource.type) + ' — ' + escapeHtml(resource.id)
+          + '</b><br>' + escapeHtml(resource.area) + '<br>Status: ' + (resource.available ? 'Available' : 'Occupied'));
+    });
+    (data.requests || []).forEach(request => {
+      if (!validPoint(request) || (Number(request.lat) === 0 && Number(request.lng) === 0)) return;
+      const color = request.status === 'Completed' ? COLORS.available
+        : request.status === 'Cancelled' ? '#64748b'
+        : request.priority === 'Critical' ? COLORS.critical
+        : request.priority === 'High' ? '#dc2626'
+        : request.priority === 'Medium' ? '#ea580c' : '#d97706';
+      addCircle(request, color, 'Emergency ' + request.id,
+        '<b>Emergency ' + escapeHtml(request.id) + '</b><br>' + escapeHtml(request.type)
+          + ' — ' + escapeHtml(request.priority) + '<br>' + escapeHtml(request.status)
+          + '<br>Area: ' + escapeHtml(request.location),
+        () => suggestRoute(request, data));
+    });
+    if (bounds.length) map.fitBounds(bounds, {padding:[25,25], maxZoom:14});
+    document.getElementById('summary').textContent = (data.areas || []).length + ' mapped areas · '
+      + (data.resources || []).length + ' resources · ' + (data.requests || []).length + ' requests · '
+      + (data.roads || []).length + ' roads';
+    if (!bounds.length) showMessage('No city-area coordinates are configured yet. Add latitude and longitude to areas in the Java application.');
+    else showMessage('Map data refreshed. Select an emergency marker to calculate a Dijkstra route.', 'success');
+  } catch (error) {
+    showMessage('Could not load local application data: ' + error.message + '. Keep the Java application running and open this page from http://127.0.0.1:8765/map.');
+  }
+}
+function initMap() {
+  if (!window.L) {
+    showMessage('Leaflet could not load. Check your internet connection; the map library is loaded from unpkg.com.');
+    return;
+  }
+  map = L.map('map').setView(DEFAULT_CENTER, 11);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom:19,
+    attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>',
+    crossOrigin:true
+  }).addTo(map);
+  markerLayer = L.layerGroup().addTo(map);
+  document.getElementById('refreshButton').addEventListener('click', refreshData);
+  refreshData();
+  refreshTimer = window.setInterval(refreshData, 15000);
+}
+initMap();
+</script>
+</body>
+</html>

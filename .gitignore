@@ -1,0 +1,26 @@
+# Java / Maven
+*.class
+target/
+*.jar
+
+# IDE / OS
+.idea/
+.vscode/
+*.iml
+.DS_Store
+Thumbs.db
+
+# Local runtime data and secrets
+data/*.txt
+!data/areas.txt
+!data/roads.txt
+!data/resources.txt
+data/*.log
+data/*.db
+data/*.db-shm
+data/*.db-wal
+.env
+!data/.gitkeep
+
+# Exports
+*.csv

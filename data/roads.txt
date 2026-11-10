@@ -1,0 +1,7 @@
+Sitabuldi|Sadar|4
+Sitabuldi|Dharampeth|5
+Sitabuldi|Medical Square|4
+Medical Square|Manewada|6
+Dharampeth|Sadar|3
+Sadar|Medical Square|7
+Dharampeth|Medical Square|6

@@ -1,0 +1,10 @@
+Sitabuldi|Ambulance|AMB001|Driver One|true
+Sitabuldi|Fire Engine|FIRE001|Driver Two|true
+Sadar|Ambulance|AMB002|Driver Three|true
+Sadar|Police Vehicle|POL001|Driver Four|true
+Dharampeth|Ambulance|AMB003|Driver Five|true
+Dharampeth|Fire Engine|FIRE002|Driver Six|true
+Medical Square|Ambulance|AMB004|Driver Seven|true
+Medical Square|Medical Team|MED001|Team Lead One|true
+Manewada|Ambulance|AMB005|Driver Eight|true
+Manewada|Police Vehicle|POL002|Driver Nine|true

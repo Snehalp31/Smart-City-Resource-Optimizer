@@ -1,0 +1,6 @@
+Sitabuldi|21.1458|79.0882
+Sadar|21.1600|79.0800
+Dharampeth|21.1400|79.0600
+Medical Square|21.1330|79.0840
+Manewada|21.1100|79.1000
+
