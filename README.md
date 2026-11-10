@@ -1,97 +1,133 @@
 # Smart City Emergency Resource Optimizer
 
-A Java 17 desktop application for city-area management, weighted road networks, emergency resources, incident requests, allocation, reporting, and an optional OpenStreetMap/Leaflet live operations map.
+A Java 17 desktop application designed to help manage emergency resources across different areas of a city. It helps municipal staff handle emergency requests, find nearby available resources, manage their allocation and monitor ongoing incidents.
 
-## What is implemented
+The project uses Java Swing for the desktop interface, Dijkstra's algorithm for finding the shortest paths and JDBC for data storage. It also includes an optional OpenStreetMap-based live operations map.
 
-- Java Swing operations dashboard with an explicit Citizen / Municipal Staff portal selector, role-specific navigation and a refreshed dashboard layout.
-- Citizen self-registration; municipal administrator bootstrap through environment variables.
-- PBKDF2-HMAC-SHA256 salted password hashes. Passwords are never stored as plaintext.
-- Weighted, bidirectional city graph and Dijkstra shortest-path resource selection.
-- Matching resource-type validation, availability checks, and disconnected-node handling.
-- Emergency requests with unique IDs, descriptions, coordinates, priority and timestamps.
-- Request status workflow: Pending, Assigned, In Progress, Completed and Cancelled.
-- Resource add/edit/remove operations (active resources cannot be removed).
-- Request search, municipal reassignment, activity history and CSV export.
-- Analytics charts calculated from application records (status, priority, resource utilization and type).
-- Persistent storage through JDBC: SQLite for local development when available, or MySQL when configured.
-- Text-file persistence fallback when the SQLite JDBC driver is not available.
-- Local-only HTTP bridge serving live application data to an OpenStreetMap/Leaflet map.
-- Dijkstra shortest-path suggestions for available matching resources, drawn over the map using configured city-area coordinates.
-- Current weather lookup for configured city areas using the free Open-Meteo forecast API (no API key required for ordinary non-commercial use).
+## Features
 
-## Important integration boundary
+- **Two separate portals:** Citizens can register and submit emergency requests, while municipal staff can manage resources and handle incidents.
+- **User authentication:** Passwords are secured using salted PBKDF2-HMAC-SHA256 hashing.
+- **City area management:** Maintains a weighted, bidirectional graph representing connections between city areas.
+- **Shortest path calculation:** Uses Dijkstra's algorithm to find the nearest available resource based on graph distance.
+- **Emergency request management:** Records requests with unique IDs, descriptions, locations, priorities and timestamps.
+- **Request tracking:** Supports Pending, Assigned, In Progress, Completed and Cancelled statuses.
+- **Resource management:** Municipal staff can add, update and remove resources. Resources involved in active requests cannot be removed.
+- **Request search and reassignment:** Staff can search requests, reassign resources and view activity history.
+- **Reports and analytics:** Displays request statistics, priorities, resource utilization and resource types. Reports can also be exported as CSV files.
+- **Database support:** Uses SQLite by default, with optional MySQL support. A local text-file storage option is also available.
+- **Live operations map:** Displays configured city areas, emergency requests and available resources using Leaflet and OpenStreetMap.
+- **Route visualization:** Shows suggested resource routes on the map using the same Dijkstra implementation used by the Java application.
+- **Weather information:** Retrieves current weather conditions for configured areas using the Open-Meteo API.
 
-The Java allocation engine uses the configured weighted city graph and Dijkstra's algorithm. When an emergency marker is selected, the Leaflet page calls the local `/api/route` endpoint. That endpoint invokes the Java `CityModel.previewNearest()` method, which shares the application's Dijkstra implementation but does not reserve or change a resource. The returned path is drawn over the map. The map suggestion does **not** dispatch or reassign a resource; the application's existing backend allocation workflow remains authoritative. Route lines follow configured area coordinates, not turn-by-turn road geometry or live traffic.
+## Technologies Used
 
-Area and incident coordinates must be entered by an authorized user. The application does not invent or randomly generate coordinates. Areas without coordinates remain usable by the graph allocator but are omitted from the map.
+- Java 17
+- Java Swing
+- JDBC
+- SQLite / MySQL
+- Maven
+- HTML, CSS and JavaScript
+- Leaflet.js
+- OpenStreetMap
+- Open-Meteo API
+- JUnit
 
-## Requirements
+## Getting Started
 
-- JDK 17 or later.
-- Maven 3.9+ recommended for SQLite/MySQL JDBC drivers and JUnit tests.
-- A desktop environment for the Swing UI.
-- Internet connection to load Leaflet and OpenStreetMap map tiles. No Google Maps API key or billing account is required.
-- Optional: MySQL 8+ server.
+### Requirements
 
-## Run (recommended: Maven)
+- JDK 17 or later
+- Maven 3.9 or later
+- Desktop environment for running the Swing application
+- Internet connection for the map and weather features
+- MySQL 8+ (optional)
 
-From the project root:
+### Running the project
+
+Clone the repository:
+
+```bash
+git clone https://github.com/Snehalp31/Smart-City-Resource-Optimizer.git
+cd Smart-City-Resource-Optimizer
+```
+
+Run the tests:
 
 ```bash
 mvn clean test
+```
+
+Start the application:
+
+```bash
 mvn exec:java
 ```
 
-The first command compiles and runs the JUnit business-logic tests. The second launches the Swing application. Maven includes SQLite JDBC and MySQL Connector/J.
+Maven automatically downloads the required dependencies, including the SQLite and MySQL JDBC drivers.
 
-## Run without Maven
+## Initial Administrator Setup
 
-This path uses the built-in file persistence fallback because JDBC database drivers are not on the classpath:
+The application supports separate Citizen and Municipal Staff portals.
 
-```bash
-javac Main.java MainGUIPastel.java MapServer.java JdbcStore.java WeatherService.java
-java MainGUIPastel
-```
+Citizens can register through the application. Municipal administrator accounts are created through environment variables during the initial setup.
 
-Run commands from the project root so the `web/` and `data/` folders resolve correctly.
-
-## First-time municipal administrator setup
-
-The login screen explicitly separates the **Citizen portal** from the **Municipal staff portal**. Public sign-up creates **citizen** accounts only. Municipal staff accounts are provisioned by the administrator. To bootstrap the first municipal administrator, set these environment variables before launching the application:
-
-### Windows PowerShell
+For Windows PowerShell:
 
 ```powershell
 $env:INITIAL_ADMIN_USER = "municipal_admin"
-$env:INITIAL_ADMIN_PASSWORD = "use-a-unique-password-at-least-12-chars"
+$env:INITIAL_ADMIN_PASSWORD = "your-unique-password"
 mvn exec:java
 ```
 
-The account is created only if there is no municipal account yet. Remove the variables after initial setup. Do not commit real credentials.
+The administrator account is created only if a municipal account does not already exist. Remove the environment variables after the initial setup.
 
-If the administrator was not bootstrapped on first launch, set the variables and restart. If a municipal account already exists, bootstrap will not create another.
+**Note:** Do not use real passwords in the source code or commit them to GitHub.
 
-## Live OpenStreetMap configuration
+## Live Operations Map
 
-No Google Maps API key or billing account is needed. The application serves the map locally at `http://127.0.0.1:8765/map`. The page uses Leaflet for interactive map controls and OpenStreetMap standard raster tiles for the basemap. The local Java HTTP service binds only to loopback. Map markers refresh every 15 seconds.
+The application includes a locally hosted map available at:
 
-Select **Current Weather** in either portal to retrieve current conditions for a configured area from Open-Meteo. An internet connection is required. Weather data is informational and is not an official emergency alert. Select **Live Operations Map** in the desktop application. Select an emergency marker to compare available matching resources. The local `/api/route` endpoint calls the Java `CityModel.previewNearest()` method, using the same Dijkstra implementation as allocation without reserving a resource. It returns the selected resource, configured route path, and graph distance; the map draws the path through the coordinates of those areas. These are configured graph routes, not turn-by-turn road geometry, live traffic, GPS tracking, or a dispatch action.
+```text
+http://127.0.0.1:8765/map
+```
 
-The map loads Leaflet from `unpkg.com` and tiles from `tile.openstreetmap.org`, so an internet connection is required. Keep the required OpenStreetMap attribution visible. The public OSM tile service has a usage policy and is not a guaranteed production hosting service; for heavy or production use, choose a compliant tile provider or self-host tiles. See <https://operations.osmfoundation.org/policies/tiles/>.
+The map uses Leaflet for interactive controls and OpenStreetMap for map tiles.
 
-## Database setup
+Users can view configured city areas and emergency locations. Selecting an emergency marker displays suggested available resources and their routes.
 
-### SQLite development mode
+The route suggestions are calculated by the Java backend through the `/api/route` endpoint. This endpoint uses the existing Dijkstra implementation to find a suitable resource and return the route for visualization.
 
-With Maven dependencies available and no `DB_URL` set, the application uses `data/smartcity.db` automatically.
+A few things to keep in mind:
 
-### MySQL mode
+- Routes follow the configured city graph and area coordinates.
+- They do not represent actual turn-by-turn road directions.
+- The map does not track vehicles using GPS.
+- Viewing a suggested route does not automatically assign or dispatch a resource.
+- Map coordinates must be entered manually by an authorized user.
 
-1. Install MySQL 8+.
-2. Run `db/schema-mysql.sql` to create the `smartcity` database and tables.
-3. Create a least-privilege database user.
-4. Set environment variables:
+An internet connection is required to load Leaflet and OpenStreetMap tiles. The application does not require a Google Maps API key.
+
+## Database Configuration
+
+### SQLite
+
+SQLite is used automatically for local development when no database URL is configured.
+
+The database is stored at:
+
+```text
+data/smartcity.db
+```
+
+### MySQL
+
+To use MySQL:
+
+1. Install MySQL 8 or later.
+2. Execute `db/schema-mysql.sql`.
+3. Create a database user with the required permissions.
+4. Configure the following environment variables:
 
 ```powershell
 $env:DB_URL = "jdbc:mysql://localhost:3306/smartcity?useSSL=true&serverTimezone=UTC"
@@ -100,21 +136,13 @@ $env:DB_PASSWORD = "YOUR_DATABASE_PASSWORD"
 mvn exec:java
 ```
 
-The Java application initializes missing tables and uses prepared statements and transactions. Do not commit database credentials. If a database URL is explicitly configured but the connection fails, startup reports an error instead of silently switching stores.
+The application initializes missing tables and uses prepared statements and database transactions.
 
-### File fallback
+### File Storage
 
-If launched with plain `javac` and no JDBC driver, the application creates local files under `data/`. Runtime data is excluded by `.gitignore`.
+If the application is compiled and run without Maven or JDBC drivers, it uses a text-file storage fallback.
 
-## Data and privacy
-
-Runtime data is stored under `data/` and is ignored by Git. Do not upload account records, requests, logs, database files, or exports to a public repository. The map's local JSON endpoint exposes mapped areas, configured weighted road edges, resource status/type and request map details; citizen sessions receive only their own request markers.
-
-## Screenshots
-
-No screenshots are included yet. Capture the running desktop dashboard and the OpenStreetMap/Leaflet operations map, then add them to a `screenshots/` folder.
-
-## Main project files
+## Project Structure
 
 ```text
 Smart-City-Resource-Optimizer/
@@ -138,22 +166,41 @@ Smart-City-Resource-Optimizer/
     └── .gitkeep
 ```
 
-## Known limitations / next engineering steps
+## Current Limitations
 
-- The application is a single-user desktop prototype; it is not a dispatch-grade multi-user service.
-- Map route suggestions are visualized from the configured graph; backend assignment continues to use the graph's configured road weights.
-- Coordinates are entered manually; geocoding and address autocomplete are not included.
-- Weather integration retrieves current conditions only; it does not issue official severe-weather warnings or automatically change emergency priorities.
-- Resource current GPS position and live vehicle tracking are not implemented; map resource markers use the resource-center coordinates.
-- There is no automated account recovery or municipal approval workflow.
-- The Swing UI is a desktop prototype; it does not include multi-user web sessions or profile-settings management.
-- Analytics currently charts request status, priority, resource utilization and request type; a time-series emergency trend chart is not yet implemented.
-- The Swing dashboard is a desktop interface rather than a web-scale multi-user operations console.
-- For production, add authenticated API sessions, database migrations, role approval, audit retention controls, automated backup, concurrency/locking around allocation, and end-to-end tests with representative map data and a compliant tile source.
+This project is currently a desktop prototype and has some limitations:
+
+- It is designed for local use rather than simultaneous access by multiple municipal teams.
+- City area and incident coordinates need to be entered manually.
+- Resource locations use resource-center coordinates rather than live GPS positions.
+- Weather information is limited to current conditions and is not an official emergency alert system.
+- The application does not currently support account recovery or municipal account approval.
+- Analytics does not yet include time-based emergency trends.
+- The map displays suggested routes but does not perform automatic dispatch.
+- The public OpenStreetMap tile service is suitable for development, but production deployment would require a compliant tile provider or self-hosted tiles.
+
+## Future Improvements
+
+Some improvements that could be added in future versions include:
+
+- GPS-based resource tracking.
+- Automatic resource allocation and dispatch notifications.
+- Address search and geocoding.
+- Emergency trend analysis using historical data.
+- Multi-user access for municipal departments.
+- Better authentication, account recovery and role management.
+- Automated database backups and improved audit logging.
 
 ## Tests
 
-`tests/ProjectLogicTest.java` covers weighted shortest path, disconnected resources, resource matching/availability, and password hashing. Run with:
+The project includes JUnit tests for important application logic, including:
+
+- Dijkstra shortest-path calculation.
+- Handling disconnected city areas.
+- Resource type matching and availability.
+- Password hashing.
+
+Run the tests using:
 
 ```bash
 mvn test
